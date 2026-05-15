@@ -1,0 +1,2 @@
+- Generate boiler plate code for agents using copilot sdk using the latest code practices.
+- If there is authentication, create env variable for api key

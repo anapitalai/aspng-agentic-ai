@@ -40,3 +40,13 @@
 ## Documentation
 - Link future process details from `docs/` rather than duplicating them here.
 - When introducing a new survey or GIS workflow, document required inputs, CRS expectations, tolerances, and output schema near the code.
+
+
+## Context Files
+
+Read the following to get the full context of the project:
+
+- @context/project-overview.md
+- @context/coding-standards.md
+- @context/ai-interaction.md
+- @context/current-feature.md
