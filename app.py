@@ -1,48 +1,82 @@
 """
-Application entry point.
+ASPNG Agentic AI — CLI entry point.
 
-Starts a single aiohttp server that routes incoming Bot Framework activities
-to the appropriate domain agent based on the request path:
+Routes a user prompt to the appropriate domain agent using the
+GitHub Copilot SDK (CopilotClient + define_tool pattern).
 
-  POST /api/survey      → Survey Solution Architect
-  POST /api/gis         → GIS Workflow Engineer
-  POST /api/gnss        → GNSS Workflow Engineer
-  POST /api/cloud-gis   → Cloud Native GIS Engineer
-  POST /api/spatial-qa  → Spatial QA Reviewer
+Usage:
+    python app.py --agent survey  "Design a cadastral traverse for a 5ha block"
+    python app.py --agent gis     "Reproject parcels from EPSG:4326 to EPSG:32755"
+    python app.py --agent gnss    "Validate RTK session with PDOP 1.8, baseline 12 km"
+    python app.py --agent cloud   "Design a COG/STAC pipeline on AWS for 10TB imagery"
+    python app.py --agent qa      "Review parcel topology for gaps and overlaps, EPSG:7856"
 
-Run:
-  python app.py
-
-Required environment variables are listed in .env.example.
-Copy .env.example to .env and fill in real credentials before starting.
+Authentication:
+    Set GITHUB_TOKEN in your environment, or run `gh auth login` first.
+    See .env.example for the full list of required variables.
 """
 
-import os
-from aiohttp import web
-from microsoft_agents.hosting.aiohttp import add_agent_routes
+import argparse
+import asyncio
+import sys
+from pathlib import Path
 
-from src.agents import (
-    create_survey_agent,
-    create_gis_agent,
-    create_gnss_agent,
-    create_cloud_gis_agent,
-    create_spatial_qa_agent,
-)
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
+from src.agents.survey_agent import run as run_survey          # noqa: E402
+from src.agents.gis_agent import run as run_gis                # noqa: E402
+from src.agents.gnss_agent import run as run_gnss              # noqa: E402
+from src.agents.cloud_gis_agent import run as run_cloud_gis    # noqa: E402
+from src.agents.spatial_qa_agent import run as run_spatial_qa  # noqa: E402
+
+AGENTS = {
+    "survey": run_survey,
+    "gis": run_gis,
+    "gnss": run_gnss,
+    "cloud": run_cloud_gis,
+    "qa": run_spatial_qa,
+}
 
 
-def build_app() -> web.Application:
-    app = web.Application()
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="ASPNG Agentic AI — GitHub Copilot SDK agents for surveying and GIS"
+    )
+    parser.add_argument(
+        "--agent",
+        choices=list(AGENTS.keys()),
+        required=True,
+        help="Domain agent to invoke",
+    )
+    parser.add_argument(
+        "prompt",
+        help="User prompt to send to the agent",
+    )
+    parser.add_argument(
+        "--no-stream",
+        action="store_true",
+        default=False,
+        help="Disable streaming output (print full response at end)",
+    )
+    return parser.parse_args()
 
-    add_agent_routes(app, create_survey_agent(), route="/api/survey")
-    add_agent_routes(app, create_gis_agent(), route="/api/gis")
-    add_agent_routes(app, create_gnss_agent(), route="/api/gnss")
-    add_agent_routes(app, create_cloud_gis_agent(), route="/api/cloud-gis")
-    add_agent_routes(app, create_spatial_qa_agent(), route="/api/spatial-qa")
 
-    return app
+async def main() -> None:
+    args = parse_args()
+    agent_fn = AGENTS[args.agent]
+    response = await agent_fn(
+        user_prompt=args.prompt,
+        streaming=not args.no_stream,
+    )
+    if args.no_stream:
+        print(response)
 
 
 if __name__ == "__main__":
-    host = os.environ.get("HOST", "localhost")
-    port = int(os.environ.get("PORT", "3978"))
-    web.run_app(build_app(), host=host, port=port)
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)
+

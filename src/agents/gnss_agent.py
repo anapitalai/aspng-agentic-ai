@@ -6,56 +6,51 @@ datum-aware outputs. Datum, epoch, antenna type, and time standard must
 be declared explicitly before any baseline or adjustment computation.
 """
 
-from microsoft_agents.hosting.core import TurnContext, TurnState
+from __future__ import annotations
 
-from .base import build_agent_app
+from .base import run_session
+from src.tools.gnss_tools import get_gnss_tools
 
-AGENT = build_agent_app("gnss-workflow-engineer")
+_SYSTEM_PROMPT = """
+You are a GNSS Workflow Engineer specialising in RTK/PPK processing,
+coordinate adjustment pipelines, and datum-aware outputs.
+
+Constraints:
+- Never assume datum, epoch, or geoid model when not explicitly provided.
+- Never hide GNSS quality thresholds inside prose; express them as code or
+  structured validation rules.
+- Only recommend processing steps that keep raw observations, corrections,
+  and adjusted results fully traceable.
+
+For each request, produce:
+1. Goal
+2. GNSS workflow design
+3. SDK tool and module changes
+4. Validation and quality checks (DOP, residuals, fix status, control fit)
+5. Assumptions and risks
+""".strip()
 
 
-@AGENT.conversation_update("membersAdded")
-async def on_members_added(context: TurnContext, state: TurnState) -> bool:
-    await context.send_activity(
-        "GNSS Workflow Engineer ready. "
-        "Provide observation format (RINEX/raw), correction method (RTK/PPK), "
-        "datum, epoch, and required output precision."
-    )
-    return True
-
-
-@AGENT.activity("message")
-async def on_message(context: TurnContext, state: TurnState) -> None:
+async def run(user_prompt: str, streaming: bool = True) -> str:
     """
-    Entry point for GNSS processing and quality-check requests.
+    Run the GNSS Workflow Engineer against a user prompt.
 
-    Expected inputs:
-    - Observation format: RINEX, proprietary raw, or rover/base log paths
-    - Correction method: RTK, PPK, or SBAS
-    - Reference datum and epoch (e.g. ITRF2020@2024.5)
-    - Antenna model and height ARP
-    - Required horizontal and vertical precision (1-sigma, mm)
+    Args:
+        user_prompt: Describe observation format, correction method, datum,
+                     epoch, and required output precision.
+        streaming:   Stream delta chunks to stdout while processing.
+
+    Returns:
+        Full assistant response as a string.
     """
-    user_input: str = context.activity.text or ""
-
-    if not user_input.strip():
-        await context.send_activity(
-            "Please describe the GNSS task including observation format and datum."
-        )
-        return
-
-    # TODO: route to src/workflows/gnss_workflow.py
-    await context.send_activity(
-        f"Received GNSS request: '{user_input}'\n"
-        "Baseline processing pipeline not yet implemented."
+    return await run_session(
+        user_prompt=user_prompt,
+        tools=get_gnss_tools(),
+        system_prompt=_SYSTEM_PROMPT,
+        streaming=streaming,
     )
-
-
-@AGENT.error
-async def on_error(context: TurnContext, error: Exception) -> None:
-    print(f"[gnss-workflow-engineer] error: {error}")
-    await context.send_activity("An error occurred in the GNSS Workflow Engineer.")
 
 
 def create_gnss_agent() -> object:
-    """Return the configured AgentApplication for the GNSS Workflow Engineer."""
-    return AGENT
+    """Return this module's run coroutine as the agent entry point."""
+    return run

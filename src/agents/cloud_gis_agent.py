@@ -3,60 +3,55 @@ Cloud Native GIS Engineer agent.
 
 Designs and implements cloud-scale GIS services, spatial ETL pipelines,
 tile and feature APIs, and observability-aware spatial systems using the
-Copilot SDK. Platform, data volume, SLO targets, and CRS must be
+GitHub Copilot SDK. Platform, data volume, SLO targets, and CRS must be
 declared before architecture recommendations are made.
 """
 
-from microsoft_agents.hosting.core import TurnContext, TurnState
+from __future__ import annotations
 
-from .base import build_agent_app
+from .base import run_session
+from src.tools.spatial_tools import get_spatial_tools
 
-AGENT = build_agent_app("cloud-native-gis-engineer")
+_SYSTEM_PROMPT = """
+You are a Cloud Native GIS Engineer specialising in scalable geospatial
+services, spatial ETL pipelines, vector tiles, COG/STAC catalogs, and
+OGC API deployments on cloud infrastructure.
+
+Constraints:
+- Never mix platform orchestration concerns with spatial business logic.
+- Always include observability, data lineage, and reproducibility in any
+  pipeline design.
+- Only recommend services that support the stated scale and reliability goals.
+
+For each request, produce:
+1. Goal and scale target
+2. Proposed cloud-native GIS architecture
+3. SDK integration plan
+4. Validation and observability plan
+5. Risks and tradeoffs
+""".strip()
 
 
-@AGENT.conversation_update("membersAdded")
-async def on_members_added(context: TurnContext, state: TurnState) -> bool:
-    await context.send_activity(
-        "Cloud Native GIS Engineer ready. "
-        "Describe cloud platform, data volume, source/sink formats, "
-        "CRS expectations, and service-level goals."
-    )
-    return True
-
-
-@AGENT.activity("message")
-async def on_message(context: TurnContext, state: TurnState) -> None:
+async def run(user_prompt: str, streaming: bool = True) -> str:
     """
-    Entry point for cloud-native GIS architecture and pipeline requests.
+    Run the Cloud Native GIS Engineer against a user prompt.
 
-    Expected inputs:
-    - Cloud platform (AWS, Azure, GCP, or on-prem Kubernetes)
-    - Data volume and ingestion rate
-    - Source and sink formats (COG, STAC, GeoParquet, vector tiles, OGC API)
-    - CRS and tiling scheme (TMS, WMTS, QuadKey, H3)
-    - Reliability, latency, and observability requirements
+    Args:
+        user_prompt: Describe cloud platform, data volume, source/sink formats,
+                     CRS expectations, and service-level goals.
+        streaming:   Stream delta chunks to stdout while processing.
+
+    Returns:
+        Full assistant response as a string.
     """
-    user_input: str = context.activity.text or ""
-
-    if not user_input.strip():
-        await context.send_activity(
-            "Please describe the cloud GIS task including platform and data volume."
-        )
-        return
-
-    # TODO: route to src/workflows/cloud_gis_workflow.py
-    await context.send_activity(
-        f"Received cloud GIS request: '{user_input}'\n"
-        "Architecture pipeline not yet implemented."
+    return await run_session(
+        user_prompt=user_prompt,
+        tools=get_spatial_tools(),
+        system_prompt=_SYSTEM_PROMPT,
+        streaming=streaming,
     )
-
-
-@AGENT.error
-async def on_error(context: TurnContext, error: Exception) -> None:
-    print(f"[cloud-native-gis-engineer] error: {error}")
-    await context.send_activity("An error occurred in the Cloud Native GIS Engineer.")
 
 
 def create_cloud_gis_agent() -> object:
-    """Return the configured AgentApplication for the Cloud Native GIS Engineer."""
-    return AGENT
+    """Return this module's run coroutine as the agent entry point."""
+    return run
