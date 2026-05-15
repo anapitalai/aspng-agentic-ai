@@ -1,1 +1,9 @@
 mcp.server
+
+# Local environment secrets
+.env
+.env.local
+.env.*.local
+
+# Keep shared templates tracked
+!.env.example
